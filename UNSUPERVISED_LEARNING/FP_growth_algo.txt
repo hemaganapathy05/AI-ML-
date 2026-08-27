@@ -1,0 +1,833 @@
+# ============================================================
+# HOUSE PRICE DATASET - COMPLETE FP-GROWTH ALGORITHM
+# ============================================================
+
+# If mlxtend is not installed, uncomment and run:
+# !pip install mlxtend
+
+
+# ============================================================
+# 1. IMPORT LIBRARIES
+# ============================================================
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+
+from mlxtend.preprocessing import TransactionEncoder
+from mlxtend.frequent_patterns import fpgrowth, association_rules
+
+
+# ============================================================
+# 2. LOAD DATASET
+# ============================================================
+
+df = pd.read_csv("modified_data.csv")
+
+print("Dataset Loaded Successfully!")
+
+print("\nDataset Shape:")
+print(df.shape)
+
+print("\nFirst 5 Rows:")
+print(df.head())
+
+
+# ============================================================
+# 3. CREATE A COPY
+# ============================================================
+
+data = df.copy()
+
+
+# ============================================================
+# 4. HANDLE MISSING VALUES
+# ============================================================
+
+# Handle numerical missing values
+
+numerical_columns = data.select_dtypes(
+    include=np.number
+).columns
+
+data[numerical_columns] = data[
+    numerical_columns
+].fillna(
+    data[numerical_columns].median()
+)
+
+
+# Handle categorical missing values
+
+categorical_columns = data.select_dtypes(
+    include="object"
+).columns
+
+for column in categorical_columns:
+
+    if data[column].isnull().sum() > 0:
+
+        data[column] = data[column].fillna(
+            data[column].mode()[0]
+        )
+
+
+print("\nMissing Values Handled Successfully!")
+
+
+# ============================================================
+# 5. CREATE CATEGORICAL FEATURES
+# ============================================================
+
+
+# -----------------------------
+# PRICE CATEGORY
+# -----------------------------
+
+data["Price_Category"] = pd.qcut(
+
+    data["price"],
+
+    q=3,
+
+    labels=[
+        "Price_Low",
+        "Price_Medium",
+        "Price_High"
+    ],
+
+    duplicates="drop"
+
+)
+
+
+# -----------------------------
+# BEDROOM CATEGORY
+# -----------------------------
+
+data["Bedrooms_Category"] = pd.cut(
+
+    data["bedrooms"],
+
+    bins=[-1, 2, 3, 100],
+
+    labels=[
+        "Bedrooms_1_2",
+        "Bedrooms_3",
+        "Bedrooms_4_Plus"
+    ]
+
+)
+
+
+# -----------------------------
+# BATHROOM CATEGORY
+# -----------------------------
+
+data["Bathrooms_Category"] = pd.cut(
+
+    data["bathrooms"],
+
+    bins=[-1, 1.5, 2.5, 100],
+
+    labels=[
+        "Bathrooms_Low",
+        "Bathrooms_Medium",
+        "Bathrooms_High"
+    ]
+
+)
+
+
+# -----------------------------
+# LIVING AREA CATEGORY
+# -----------------------------
+
+data["Living_Area_Category"] = pd.qcut(
+
+    data["sqft_living"],
+
+    q=3,
+
+    labels=[
+        "Living_Area_Small",
+        "Living_Area_Medium",
+        "Living_Area_Large"
+    ],
+
+    duplicates="drop"
+
+)
+
+
+# -----------------------------
+# LOT SIZE CATEGORY
+# -----------------------------
+
+data["Lot_Size_Category"] = pd.qcut(
+
+    data["sqft_lot"],
+
+    q=3,
+
+    labels=[
+        "Lot_Small",
+        "Lot_Medium",
+        "Lot_Large"
+    ],
+
+    duplicates="drop"
+
+)
+
+
+# -----------------------------
+# FLOORS CATEGORY
+# -----------------------------
+
+data["Floors_Category"] = pd.cut(
+
+    data["floors"],
+
+    bins=[-1, 1, 2, 100],
+
+    labels=[
+        "Floors_1",
+        "Floors_2",
+        "Floors_3_Plus"
+    ]
+
+)
+
+
+# -----------------------------
+# WATERFRONT CATEGORY
+# -----------------------------
+
+if "waterfront" in data.columns:
+
+    data["Waterfront_Category"] = np.where(
+
+        data["waterfront"] == 1,
+
+        "Waterfront_Yes",
+
+        "Waterfront_No"
+
+    )
+
+
+# -----------------------------
+# VIEW CATEGORY
+# -----------------------------
+
+if "view" in data.columns:
+
+    data["View_Category"] = np.where(
+
+        data["view"] > 0,
+
+        "View_Yes",
+
+        "View_No"
+
+    )
+
+
+# -----------------------------
+# CONDITION CATEGORY
+# -----------------------------
+
+if "condition" in data.columns:
+
+    data["Condition_Category"] = pd.cut(
+
+        data["condition"],
+
+        bins=[0, 2, 3, 5],
+
+        labels=[
+            "Condition_Poor",
+            "Condition_Average",
+            "Condition_Good"
+        ],
+
+        include_lowest=True
+
+    )
+
+
+# -----------------------------
+# HOUSE AGE CATEGORY
+# -----------------------------
+
+if "yr_built" in data.columns:
+
+    current_year = 2026
+
+    data["House_Age"] = (
+
+        current_year
+        -
+        data["yr_built"]
+
+    )
+
+    data["Age_Category"] = pd.qcut(
+
+        data["House_Age"],
+
+        q=3,
+
+        labels=[
+            "House_New",
+            "House_Medium_Age",
+            "House_Old"
+        ],
+
+        duplicates="drop"
+
+    )
+
+
+# -----------------------------
+# PRICE PER SQFT CATEGORY
+# -----------------------------
+
+if "price_per_sqft" in data.columns:
+
+    data["Price_Per_Sqft_Category"] = pd.qcut(
+
+        data["price_per_sqft"],
+
+        q=3,
+
+        labels=[
+            "Price_Per_Sqft_Low",
+            "Price_Per_Sqft_Medium",
+            "Price_Per_Sqft_High"
+        ],
+
+        duplicates="drop"
+
+    )
+
+
+print(
+    "\nCategorical Features Created Successfully!"
+)
+
+
+# ============================================================
+# 6. SELECT TRANSACTION COLUMNS
+# ============================================================
+
+transaction_columns = [
+
+    "Price_Category",
+
+    "Bedrooms_Category",
+
+    "Bathrooms_Category",
+
+    "Living_Area_Category",
+
+    "Lot_Size_Category",
+
+    "Floors_Category",
+
+    "Waterfront_Category",
+
+    "View_Category",
+
+    "Condition_Category",
+
+    "Age_Category",
+
+    "Price_Per_Sqft_Category"
+
+]
+
+
+# Keep only existing columns
+
+transaction_columns = [
+
+    column
+
+    for column in transaction_columns
+
+    if column in data.columns
+
+]
+
+
+print(
+    "\nTransaction Columns:"
+)
+
+print(
+    transaction_columns
+)
+
+
+# ============================================================
+# 7. CREATE TRANSACTIONS
+# ============================================================
+
+transactions = []
+
+
+for _, row in data.iterrows():
+
+    transaction = []
+
+
+    for column in transaction_columns:
+
+        value = row[column]
+
+
+        if pd.notna(value):
+
+            transaction.append(
+                str(value)
+            )
+
+
+    transactions.append(
+        transaction
+    )
+
+
+print(
+    f"\nTotal Transactions: "
+    f"{len(transactions)}"
+)
+
+
+print(
+    "\nExample Transaction:"
+)
+
+print(
+    transactions[0]
+)
+
+
+# ============================================================
+# 8. TRANSACTION ENCODING
+# ============================================================
+
+te = TransactionEncoder()
+
+
+transaction_array = te.fit(
+
+    transactions
+
+).transform(
+
+    transactions
+
+)
+
+
+transaction_df = pd.DataFrame(
+
+    transaction_array,
+
+    columns=te.columns_
+
+)
+
+
+print(
+    "\nTransaction Matrix Created Successfully!"
+)
+
+
+print(
+    transaction_df.head()
+)
+
+
+# ============================================================
+# 9. APPLY FP-GROWTH ALGORITHM
+# ============================================================
+
+min_support = 0.05
+
+
+frequent_itemsets = fpgrowth(
+
+    transaction_df,
+
+    min_support=min_support,
+
+    use_colnames=True
+
+)
+
+
+# Add itemset length
+
+frequent_itemsets["length"] = (
+
+    frequent_itemsets[
+        "itemsets"
+    ]
+
+    .apply(
+        lambda x: len(x)
+    )
+
+)
+
+
+# Sort by support
+
+frequent_itemsets = (
+
+    frequent_itemsets
+
+    .sort_values(
+
+        by="support",
+
+        ascending=False
+
+    )
+
+)
+
+
+print(
+    "\nFREQUENT ITEMSETS:"
+)
+
+print(
+
+    frequent_itemsets
+
+    .head(20)
+
+)
+
+
+# ============================================================
+# 10. GENERATE ASSOCIATION RULES
+# ============================================================
+
+rules = association_rules(
+
+    frequent_itemsets,
+
+    metric="confidence",
+
+    min_threshold=0.5
+
+)
+
+
+# Sort rules by lift
+
+rules = rules.sort_values(
+
+    by="lift",
+
+    ascending=False
+
+)
+
+
+print(
+    "\nALL ASSOCIATION RULES:"
+)
+
+
+print(
+
+    rules[
+
+        [
+
+            "antecedents",
+
+            "consequents",
+
+            "support",
+
+            "confidence",
+
+            "lift"
+
+        ]
+
+    ]
+
+    .head(20)
+
+)
+
+
+# ============================================================
+# 11. FILTER STRONG ASSOCIATION RULES
+# ============================================================
+
+strong_rules = rules[
+
+    (
+
+        rules["confidence"] >= 0.6
+
+    )
+
+    &
+
+    (
+
+        rules["lift"] > 1
+
+    )
+
+]
+
+
+strong_rules = (
+
+    strong_rules
+
+    .sort_values(
+
+        by="lift",
+
+        ascending=False
+
+    )
+
+)
+
+
+print(
+    "\nSTRONG ASSOCIATION RULES:"
+)
+
+
+print(
+
+    strong_rules[
+
+        [
+
+            "antecedents",
+
+            "consequents",
+
+            "support",
+
+            "confidence",
+
+            "lift"
+
+        ]
+
+    ]
+
+    .head(20)
+
+)
+
+
+# ============================================================
+# 12. VISUALIZE TOP RULES
+# ============================================================
+
+top_rules = strong_rules.head(10)
+
+
+if len(top_rules) > 0:
+
+    plt.figure(
+        figsize=(12, 6)
+    )
+
+
+    plt.bar(
+
+        range(
+            len(top_rules)
+        ),
+
+        top_rules["lift"]
+
+    )
+
+
+    plt.title(
+        "Top 10 FP-Growth Association Rules by Lift"
+    )
+
+
+    plt.xlabel(
+        "Association Rules"
+    )
+
+
+    plt.ylabel(
+        "Lift"
+    )
+
+
+    plt.xticks(
+
+        range(
+            len(top_rules)
+        ),
+
+        [
+
+            f"Rule {i+1}"
+
+            for i in range(
+                len(top_rules)
+            )
+
+        ]
+
+    )
+
+
+    plt.grid(
+        axis="y",
+        alpha=0.5
+    )
+
+
+    plt.show()
+
+
+else:
+
+    print(
+        "\nNo strong rules found."
+    )
+
+    print(
+        "Try reducing min_support "
+        "or confidence threshold."
+    )
+
+
+# ============================================================
+# 13. SAVE RESULTS
+# ============================================================
+
+os.makedirs(
+
+    "outputs",
+
+    exist_ok=True
+
+)
+
+
+# Save frequent itemsets
+
+frequent_itemsets.to_csv(
+
+    "outputs/fpgrowth_frequent_itemsets.csv",
+
+    index=False
+
+)
+
+
+# Save all rules
+
+rules.to_csv(
+
+    "outputs/fpgrowth_all_rules.csv",
+
+    index=False
+
+)
+
+
+# Save strong rules
+
+strong_rules.to_csv(
+
+    "outputs/fpgrowth_strong_rules.csv",
+
+    index=False
+
+)
+
+
+# ============================================================
+# 14. FINAL RESULTS
+# ============================================================
+
+print(
+    "\n================================================"
+)
+
+print(
+    "FP-GROWTH ALGORITHM COMPLETED SUCCESSFULLY!"
+)
+
+print(
+    "================================================"
+)
+
+
+print(
+    f"\nTotal Transactions: "
+    f"{len(transactions)}"
+)
+
+
+print(
+    f"Minimum Support: "
+    f"{min_support}"
+)
+
+
+print(
+    f"Frequent Itemsets Found: "
+    f"{len(frequent_itemsets)}"
+)
+
+
+print(
+    f"Association Rules Found: "
+    f"{len(rules)}"
+)
+
+
+print(
+    f"Strong Rules Found: "
+    f"{len(strong_rules)}"
+)
+
+
+print(
+    "\nOutput Files:"
+)
+
+
+print(
+    "1. outputs/fpgrowth_frequent_itemsets.csv"
+)
+
+
+print(
+    "2. outputs/fpgrowth_all_rules.csv"
+)
+
+
+print(
+    "3. outputs/fpgrowth_strong_rules.csv"
+)

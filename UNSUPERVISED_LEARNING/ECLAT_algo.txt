@@ -1,0 +1,707 @@
+# ============================================================
+# HOUSE PRICE DATASET - COMPLETE ECLAT ALGORITHM
+# ============================================================
+
+# ============================================================
+# 1. IMPORT LIBRARIES
+# ============================================================
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+
+
+# ============================================================
+# 2. LOAD DATASET
+# ============================================================
+
+df = pd.read_csv("modified_data.csv")
+
+print("Dataset Loaded Successfully!")
+
+print("\nDataset Shape:", df.shape)
+
+print("\nFirst 5 Rows:")
+print(df.head())
+
+
+# ============================================================
+# 3. CREATE COPY OF DATASET
+# ============================================================
+
+data = df.copy()
+
+
+# ============================================================
+# 4. HANDLE MISSING VALUES
+# ============================================================
+
+# Numerical columns
+numerical_columns = data.select_dtypes(
+    include=np.number
+).columns
+
+data[numerical_columns] = data[
+    numerical_columns
+].fillna(
+    data[numerical_columns].median()
+)
+
+
+# Categorical columns
+categorical_columns = data.select_dtypes(
+    include="object"
+).columns
+
+for column in categorical_columns:
+
+    if data[column].isnull().sum() > 0:
+
+        data[column] = data[column].fillna(
+            data[column].mode()[0]
+        )
+
+
+print("\nMissing Values Handled Successfully!")
+
+
+# ============================================================
+# 5. CREATE CATEGORICAL FEATURES
+# ============================================================
+
+# -----------------------------
+# PRICE CATEGORY
+# -----------------------------
+
+data["Price_Category"] = pd.qcut(
+    data["price"],
+    q=3,
+    labels=[
+        "Price_Low",
+        "Price_Medium",
+        "Price_High"
+    ],
+    duplicates="drop"
+)
+
+
+# -----------------------------
+# BEDROOM CATEGORY
+# -----------------------------
+
+data["Bedrooms_Category"] = pd.cut(
+    data["bedrooms"],
+    bins=[-1, 2, 3, 100],
+    labels=[
+        "Bedrooms_1_2",
+        "Bedrooms_3",
+        "Bedrooms_4_Plus"
+    ]
+)
+
+
+# -----------------------------
+# BATHROOM CATEGORY
+# -----------------------------
+
+data["Bathrooms_Category"] = pd.cut(
+    data["bathrooms"],
+    bins=[-1, 1.5, 2.5, 100],
+    labels=[
+        "Bathrooms_Low",
+        "Bathrooms_Medium",
+        "Bathrooms_High"
+    ]
+)
+
+
+# -----------------------------
+# LIVING AREA CATEGORY
+# -----------------------------
+
+data["Living_Area_Category"] = pd.qcut(
+    data["sqft_living"],
+    q=3,
+    labels=[
+        "Living_Area_Small",
+        "Living_Area_Medium",
+        "Living_Area_Large"
+    ],
+    duplicates="drop"
+)
+
+
+# -----------------------------
+# LOT SIZE CATEGORY
+# -----------------------------
+
+data["Lot_Size_Category"] = pd.qcut(
+    data["sqft_lot"],
+    q=3,
+    labels=[
+        "Lot_Small",
+        "Lot_Medium",
+        "Lot_Large"
+    ],
+    duplicates="drop"
+)
+
+
+# -----------------------------
+# FLOORS CATEGORY
+# -----------------------------
+
+data["Floors_Category"] = pd.cut(
+    data["floors"],
+    bins=[-1, 1, 2, 100],
+    labels=[
+        "Floors_1",
+        "Floors_2",
+        "Floors_3_Plus"
+    ]
+)
+
+
+# -----------------------------
+# WATERFRONT CATEGORY
+# -----------------------------
+
+if "waterfront" in data.columns:
+
+    data["Waterfront_Category"] = np.where(
+        data["waterfront"] == 1,
+        "Waterfront_Yes",
+        "Waterfront_No"
+    )
+
+
+# -----------------------------
+# VIEW CATEGORY
+# -----------------------------
+
+if "view" in data.columns:
+
+    data["View_Category"] = np.where(
+        data["view"] > 0,
+        "View_Yes",
+        "View_No"
+    )
+
+
+# -----------------------------
+# CONDITION CATEGORY
+# -----------------------------
+
+if "condition" in data.columns:
+
+    data["Condition_Category"] = pd.cut(
+        data["condition"],
+        bins=[0, 2, 3, 5],
+        labels=[
+            "Condition_Poor",
+            "Condition_Average",
+            "Condition_Good"
+        ],
+        include_lowest=True
+    )
+
+
+# -----------------------------
+# HOUSE AGE CATEGORY
+# -----------------------------
+
+if "yr_built" in data.columns:
+
+    data["House_Age"] = (
+        2026 - data["yr_built"]
+    )
+
+    data["Age_Category"] = pd.qcut(
+        data["House_Age"],
+        q=3,
+        labels=[
+            "House_New",
+            "House_Medium_Age",
+            "House_Old"
+        ],
+        duplicates="drop"
+    )
+
+
+# -----------------------------
+# PRICE PER SQFT CATEGORY
+# -----------------------------
+
+if "price_per_sqft" in data.columns:
+
+    data["Price_Per_Sqft_Category"] = pd.qcut(
+        data["price_per_sqft"],
+        q=3,
+        labels=[
+            "Price_Per_Sqft_Low",
+            "Price_Per_Sqft_Medium",
+            "Price_Per_Sqft_High"
+        ],
+        duplicates="drop"
+    )
+
+
+print("\nCategorical Features Created Successfully!")
+
+
+# ============================================================
+# 6. SELECT TRANSACTION COLUMNS
+# ============================================================
+
+transaction_columns = [
+
+    "Price_Category",
+    "Bedrooms_Category",
+    "Bathrooms_Category",
+    "Living_Area_Category",
+    "Lot_Size_Category",
+    "Floors_Category",
+    "Waterfront_Category",
+    "View_Category",
+    "Condition_Category",
+    "Age_Category",
+    "Price_Per_Sqft_Category"
+
+]
+
+
+# Keep only columns available in dataset
+
+transaction_columns = [
+
+    column
+
+    for column in transaction_columns
+
+    if column in data.columns
+
+]
+
+
+print("\nTransaction Columns:")
+
+print(transaction_columns)
+
+
+# ============================================================
+# 7. CREATE TRANSACTIONS
+# ============================================================
+
+transactions = []
+
+
+for _, row in data.iterrows():
+
+    transaction = []
+
+    for column in transaction_columns:
+
+        value = row[column]
+
+        if pd.notna(value):
+
+            transaction.append(
+                str(value)
+            )
+
+    transactions.append(
+        transaction
+    )
+
+
+print("\nTotal Transactions:", len(transactions))
+
+print("\nExample Transaction:")
+
+print(transactions[0])
+
+
+# ============================================================
+# 8. CREATE VERTICAL DATABASE
+# ============================================================
+
+# ECLAT uses:
+# ITEM -> TRANSACTION ID SET
+
+vertical_database = {}
+
+
+for transaction_id, transaction in enumerate(transactions):
+
+    for item in transaction:
+
+        if item not in vertical_database:
+
+            vertical_database[item] = set()
+
+        vertical_database[item].add(
+            transaction_id
+        )
+
+
+print("\nVertical Database Created Successfully!")
+
+print(
+    "Total Unique Items:",
+    len(vertical_database)
+)
+
+
+# ============================================================
+# 9. SET MINIMUM SUPPORT
+# ============================================================
+
+min_support = 0.05
+
+min_support_count = int(
+    min_support * len(transactions)
+)
+
+
+print("\nMinimum Support:", min_support)
+
+print(
+    "Minimum Support Count:",
+    min_support_count
+)
+
+
+# ============================================================
+# 10. ECLAT FUNCTION
+# ============================================================
+
+def eclat(
+    prefix,
+    items,
+    min_support_count,
+    frequent_itemsets
+):
+
+    # Convert dictionary into list
+    items = list(items.items())
+
+    # Loop through every item
+
+    for i in range(len(items)):
+
+        item, transaction_ids = items[i]
+
+        # Create a new itemset
+
+        new_itemset = prefix + (item,)
+
+        # Calculate support count
+
+        support_count = len(
+            transaction_ids
+        )
+
+        # Check minimum support
+
+        if support_count >= min_support_count:
+
+            # Calculate support
+
+            support = (
+                support_count
+                /
+                len(transactions)
+            )
+
+            # Store frequent itemset
+
+            frequent_itemsets.append({
+
+                "itemsets":
+                frozenset(new_itemset),
+
+                "support":
+                support,
+
+                "support_count":
+                support_count,
+
+                "length":
+                len(new_itemset)
+
+            })
+
+
+            # Create suffix items
+
+            suffix_items = {}
+
+
+            # Compare current item with remaining items
+
+            for j in range(
+                i + 1,
+                len(items)
+            ):
+
+                suffix_item, suffix_transaction_ids = items[j]
+
+                # ECLAT CORE OPERATION:
+                # INTERSECTION OF TRANSACTION IDs
+
+                intersection = (
+                    transaction_ids
+                    &
+                    suffix_transaction_ids
+                )
+
+                # Keep frequent intersections
+
+                if len(intersection) >= min_support_count:
+
+                    suffix_items[
+                        suffix_item
+                    ] = intersection
+
+
+            # Recursive ECLAT call
+
+            if suffix_items:
+
+                eclat(
+                    new_itemset,
+                    suffix_items,
+                    min_support_count,
+                    frequent_itemsets
+                )
+
+
+# ============================================================
+# 11. APPLY ECLAT ALGORITHM
+# ============================================================
+
+frequent_itemsets = []
+
+
+# Remove infrequent individual items
+
+initial_items = {
+
+    item: transaction_ids
+
+    for item, transaction_ids
+
+    in vertical_database.items()
+
+    if len(transaction_ids)
+    >=
+    min_support_count
+
+}
+
+
+# Run ECLAT
+
+eclat(
+    tuple(),
+    initial_items,
+    min_support_count,
+    frequent_itemsets
+)
+
+
+# ============================================================
+# 12. CREATE DATAFRAME
+# ============================================================
+
+frequent_itemsets_df = pd.DataFrame(
+    frequent_itemsets
+)
+
+
+# Sort frequent itemsets by support
+
+frequent_itemsets_df = (
+    frequent_itemsets_df
+    .sort_values(
+        by="support",
+        ascending=False
+    )
+    .reset_index(
+        drop=True
+    )
+)
+
+
+print("\nTOP 20 FREQUENT ITEMSETS:")
+
+print(
+    frequent_itemsets_df.head(20)
+)
+
+
+# ============================================================
+# 13. FREQUENT ITEMSETS BY LENGTH
+# ============================================================
+
+itemset_length_count = (
+    frequent_itemsets_df["length"]
+    .value_counts()
+    .sort_index()
+)
+
+
+print("\nFREQUENT ITEMSETS BY LENGTH:")
+
+print(
+    itemset_length_count
+)
+
+
+# ============================================================
+# 14. VISUALIZATION
+# ============================================================
+
+plt.figure(figsize=(10, 6))
+
+plt.bar(
+    itemset_length_count.index,
+    itemset_length_count.values
+)
+
+plt.title(
+    "Number of Frequent Itemsets by Length - ECLAT"
+)
+
+plt.xlabel(
+    "Number of Items"
+)
+
+plt.ylabel(
+    "Number of Frequent Itemsets"
+)
+
+plt.xticks(
+    itemset_length_count.index
+)
+
+plt.grid(
+    axis="y",
+    alpha=0.5
+)
+
+plt.show()
+
+
+# ============================================================
+# 15. TOP FREQUENT ITEMSETS VISUALIZATION
+# ============================================================
+
+top_itemsets = frequent_itemsets_df.head(15)
+
+
+plt.figure(figsize=(12, 6))
+
+plt.bar(
+    range(len(top_itemsets)),
+    top_itemsets["support"]
+)
+
+plt.title(
+    "Top 15 Frequent Itemsets by Support - ECLAT"
+)
+
+plt.xlabel(
+    "Frequent Itemsets"
+)
+
+plt.ylabel(
+    "Support"
+)
+
+plt.xticks(
+    range(len(top_itemsets)),
+    [
+        f"Itemset {i+1}"
+        for i in range(len(top_itemsets))
+    ]
+)
+
+plt.grid(
+    axis="y",
+    alpha=0.5
+)
+
+plt.show()
+
+
+# ============================================================
+# 16. CONVERT ITEMSETS TO READABLE FORMAT
+# ============================================================
+
+frequent_itemsets_df["itemsets"] = (
+    frequent_itemsets_df["itemsets"]
+    .apply(
+        lambda x: ", ".join(
+            sorted(list(x))
+        )
+    )
+)
+
+
+# ============================================================
+# 17. SAVE RESULTS
+# ============================================================
+
+os.makedirs(
+    "outputs",
+    exist_ok=True
+)
+
+
+frequent_itemsets_df.to_csv(
+    "outputs/eclat_frequent_itemsets.csv",
+    index=False
+)
+
+
+# ============================================================
+# 18. FINAL RESULTS
+# ============================================================
+
+print("\n" + "=" * 60)
+
+print(
+    "ECLAT ALGORITHM COMPLETED SUCCESSFULLY!"
+)
+
+print("=" * 60)
+
+
+print(
+    "\nTotal Transactions:",
+    len(transactions)
+)
+
+print(
+    "Total Unique Items:",
+    len(vertical_database)
+)
+
+print(
+    "Minimum Support:",
+    min_support
+)
+
+print(
+    "Frequent Itemsets Found:",
+    len(frequent_itemsets_df)
+)
+
+
+print("\nSaved Output File:")
+
+print(
+    "outputs/eclat_frequent_itemsets.csv"
+)

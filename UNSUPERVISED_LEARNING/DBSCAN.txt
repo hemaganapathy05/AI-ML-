@@ -1,0 +1,717 @@
+# ============================================================
+# HOUSE PRICE DATASET - COMPLETE DBSCAN CLUSTERING
+# ============================================================
+
+# -----------------------------
+# 1. IMPORT LIBRARIES
+# -----------------------------
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+import joblib
+
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.cluster import DBSCAN
+from sklearn.neighbors import NearestNeighbors
+from sklearn.metrics import silhouette_score
+
+
+# ============================================================
+# 2. LOAD DATASET
+# ============================================================
+
+df = pd.read_csv("modified_data.csv")
+
+print("Dataset Loaded Successfully!")
+print("\nDataset Shape:", df.shape)
+
+print("\nFirst 5 Rows:")
+print(df.head())
+
+
+# ============================================================
+# 3. CREATE COPY OF DATASET
+# ============================================================
+
+data = df.copy()
+
+
+# ============================================================
+# 4. HANDLE MISSING VALUES
+# ============================================================
+
+# Handle numerical missing values
+numerical_columns = data.select_dtypes(
+    include=np.number
+).columns
+
+data[numerical_columns] = data[
+    numerical_columns
+].fillna(
+    data[numerical_columns].median()
+)
+
+
+# Handle categorical missing values
+categorical_columns = data.select_dtypes(
+    include="object"
+).columns
+
+for column in categorical_columns:
+
+    if data[column].isnull().sum() > 0:
+
+        data[column] = data[column].fillna(
+            data[column].mode()[0]
+        )
+
+
+print("\nMissing Values After Cleaning:")
+print(data.isnull().sum())
+
+
+# ============================================================
+# 5. REMOVE UNNECESSARY COLUMNS
+# ============================================================
+
+data = data.drop(
+    columns=["id", "street"],
+    errors="ignore"
+)
+
+print("\nColumns After Removing ID and Street:")
+print(data.columns.tolist())
+
+
+# ============================================================
+# 6. PROCESS DATE COLUMN
+# ============================================================
+
+if "date" in data.columns:
+
+    data["date"] = pd.to_datetime(
+        data["date"],
+        errors="coerce"
+    )
+
+    # Extract year and month
+    data["year"] = data["date"].dt.year
+    data["month"] = data["date"].dt.month
+
+    # Fill missing values
+    data["year"] = data["year"].fillna(
+        data["year"].median()
+    )
+
+    data["month"] = data["month"].fillna(
+        data["month"].median()
+    )
+
+    # Remove original date column
+    data = data.drop(
+        columns=["date"]
+    )
+
+
+# ============================================================
+# 7. ENCODE CATEGORICAL COLUMNS
+# ============================================================
+
+categorical_columns = data.select_dtypes(
+    include=["object"]
+).columns
+
+label_encoders = {}
+
+for column in categorical_columns:
+
+    le = LabelEncoder()
+
+    data[column] = le.fit_transform(
+        data[column].astype(str)
+    )
+
+    label_encoders[column] = le
+
+
+print("\nCategorical Columns Encoded Successfully!")
+
+
+# ============================================================
+# 8. FEATURE SCALING
+# ============================================================
+
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(
+    data
+)
+
+scaled_df = pd.DataFrame(
+    scaled_data,
+    columns=data.columns
+)
+
+print("\nFeature Scaling Completed Successfully!")
+
+
+# ============================================================
+# 9. FIND EPS USING K-DISTANCE GRAPH
+# ============================================================
+
+# min_samples value
+min_samples = 5
+
+
+# Find nearest neighbors
+neighbors = NearestNeighbors(
+    n_neighbors=min_samples
+)
+
+neighbors_fit = neighbors.fit(
+    scaled_df
+)
+
+
+# Calculate distances
+distances, indices = neighbors_fit.kneighbors(
+    scaled_df
+)
+
+
+# Sort distances
+distances = np.sort(
+    distances[:, min_samples - 1]
+)
+
+
+# Plot K-Distance Graph
+
+plt.figure(
+    figsize=(10, 6)
+)
+
+plt.plot(
+    distances
+)
+
+plt.title(
+    "K-Distance Graph for Selecting EPS"
+)
+
+plt.xlabel(
+    "Data Points Sorted by Distance"
+)
+
+plt.ylabel(
+    f"{min_samples}-Nearest Neighbor Distance"
+)
+
+plt.grid()
+
+plt.show()
+
+
+# ============================================================
+# 10. SELECT EPS VALUE
+# ============================================================
+
+# Change this value after checking
+# the K-Distance Graph
+
+eps_value = 1.5
+
+print(
+    f"\nSelected EPS Value: {eps_value}"
+)
+
+print(
+    f"Selected min_samples: {min_samples}"
+)
+
+
+# ============================================================
+# 11. TRAIN DBSCAN MODEL
+# ============================================================
+
+dbscan_model = DBSCAN(
+
+    eps=eps_value,
+
+    min_samples=min_samples
+
+)
+
+
+# Generate cluster labels
+
+dbscan_labels = dbscan_model.fit_predict(
+    scaled_df
+)
+
+
+# ============================================================
+# 12. ADD CLUSTER LABELS
+# ============================================================
+
+df_dbscan = df.copy()
+
+df_dbscan[
+    "DBSCAN_Cluster"
+] = dbscan_labels
+
+
+print(
+    "\nDBSCAN Clustering Completed Successfully!"
+)
+
+
+# ============================================================
+# 13. COUNT CLUSTERS AND OUTLIERS
+# ============================================================
+
+unique_labels = np.unique(
+    dbscan_labels
+)
+
+
+# Number of clusters
+# -1 represents noise
+
+n_clusters = len(
+    set(dbscan_labels)
+) - (
+    1 if -1 in dbscan_labels else 0
+)
+
+
+# Number of outliers
+
+n_outliers = list(
+    dbscan_labels
+).count(-1)
+
+
+print(
+    f"\nNumber of Clusters Found: {n_clusters}"
+)
+
+print(
+    f"Number of Outliers Found: {n_outliers}"
+)
+
+
+# ============================================================
+# 14. DISPLAY CLUSTER DISTRIBUTION
+# ============================================================
+
+cluster_counts = (
+
+    df_dbscan[
+        "DBSCAN_Cluster"
+    ]
+
+    .value_counts()
+
+    .sort_index()
+
+)
+
+
+print(
+    "\nNUMBER OF HOUSES IN EACH CLUSTER:"
+)
+
+print(
+    cluster_counts
+)
+
+
+# ============================================================
+# 15. VISUALIZE CLUSTER DISTRIBUTION
+# ============================================================
+
+plt.figure(
+    figsize=(10, 6)
+)
+
+cluster_counts.plot(
+    kind="bar"
+)
+
+plt.title(
+    "DBSCAN Cluster Distribution"
+)
+
+plt.xlabel(
+    "Cluster (-1 = Outliers)"
+)
+
+plt.ylabel(
+    "Number of Houses"
+)
+
+plt.xticks(
+    rotation=0
+)
+
+plt.show()
+
+
+# ============================================================
+# 16. CALCULATE SILHOUETTE SCORE
+# ============================================================
+
+# Remove outliers before calculating
+# silhouette score
+
+valid_mask = (
+    dbscan_labels != -1
+)
+
+
+valid_labels = dbscan_labels[
+    valid_mask
+]
+
+
+valid_data = scaled_df[
+    valid_mask
+]
+
+
+if len(
+    np.unique(valid_labels)
+) > 1:
+
+    dbscan_silhouette = silhouette_score(
+
+        valid_data,
+
+        valid_labels
+
+    )
+
+    print(
+        "\nDBSCAN Silhouette Score:",
+        round(
+            dbscan_silhouette,
+            4
+        )
+    )
+
+else:
+
+    print(
+        "\nSilhouette Score cannot be calculated."
+    )
+
+    print(
+        "DBSCAN found fewer than 2 valid clusters."
+    )
+
+
+# ============================================================
+# 17. CLUSTER ANALYSIS
+# ============================================================
+
+important_features = [
+
+    "price",
+
+    "bedrooms",
+
+    "bathrooms",
+
+    "sqft_living",
+
+    "sqft_lot",
+
+    "floors",
+
+    "waterfront",
+
+    "view",
+
+    "condition",
+
+    "yr_built",
+
+    "price_per_sqft"
+
+]
+
+
+# Keep only existing columns
+
+important_features = [
+
+    column
+
+    for column in important_features
+
+    if column in df_dbscan.columns
+
+]
+
+
+cluster_summary = (
+
+    df_dbscan
+
+    .groupby(
+        "DBSCAN_Cluster"
+    )
+
+    [important_features]
+
+    .mean()
+
+)
+
+
+print(
+    "\nDBSCAN CLUSTER SUMMARY:"
+)
+
+print(
+    cluster_summary
+)
+
+
+# ============================================================
+# 18. VISUALIZE CLUSTERS
+# ============================================================
+
+plt.figure(
+    figsize=(10, 7)
+)
+
+
+scatter = plt.scatter(
+
+    df_dbscan[
+        "sqft_living"
+    ],
+
+    df_dbscan[
+        "price"
+    ],
+
+    c=df_dbscan[
+        "DBSCAN_Cluster"
+    ],
+
+    alpha=0.6
+
+)
+
+
+plt.title(
+    "DBSCAN Clustering: Living Area vs Price"
+)
+
+plt.xlabel(
+    "Square Feet Living Area"
+)
+
+plt.ylabel(
+    "House Price"
+)
+
+plt.colorbar(
+    scatter,
+    label="Cluster (-1 = Outliers)"
+)
+
+plt.show()
+
+
+# ============================================================
+# 19. VISUALIZE OUTLIERS SEPARATELY
+# ============================================================
+
+plt.figure(
+    figsize=(10, 7)
+)
+
+
+# Normal houses
+
+normal_houses = df_dbscan[
+    df_dbscan[
+        "DBSCAN_Cluster"
+    ] != -1
+]
+
+
+# Outlier houses
+
+outlier_houses = df_dbscan[
+    df_dbscan[
+        "DBSCAN_Cluster"
+    ] == -1
+]
+
+
+plt.scatter(
+
+    normal_houses[
+        "sqft_living"
+    ],
+
+    normal_houses[
+        "price"
+    ],
+
+    alpha=0.5,
+
+    label="Normal Houses"
+
+)
+
+
+plt.scatter(
+
+    outlier_houses[
+        "sqft_living"
+    ],
+
+    outlier_houses[
+        "price"
+    ],
+
+    alpha=0.8,
+
+    label="Outliers"
+
+)
+
+
+plt.title(
+    "DBSCAN Outlier Detection"
+)
+
+plt.xlabel(
+    "Square Feet Living Area"
+)
+
+plt.ylabel(
+    "House Price"
+)
+
+plt.legend()
+
+plt.show()
+
+
+# ============================================================
+# 20. SAVE MODEL
+# ============================================================
+
+os.makedirs(
+    "models",
+    exist_ok=True
+)
+
+
+# Save DBSCAN model
+
+joblib.dump(
+
+    dbscan_model,
+
+    "models/dbscan_model.pkl"
+
+)
+
+
+# Save scaler
+
+joblib.dump(
+
+    scaler,
+
+    "models/dbscan_scaler.pkl"
+
+)
+
+
+# Save label encoders
+
+joblib.dump(
+
+    label_encoders,
+
+    "models/dbscan_label_encoders.pkl"
+
+)
+
+
+# ============================================================
+# 21. SAVE CLUSTERED DATASET
+# ============================================================
+
+df_dbscan.to_csv(
+
+    "house_dbscan_clustered.csv",
+
+    index=False
+
+)
+
+
+# ============================================================
+# 22. FINAL OUTPUT
+# ============================================================
+
+print(
+    "\n================================================"
+)
+
+print(
+    "DBSCAN CLUSTERING COMPLETED SUCCESSFULLY!"
+)
+
+print(
+    "================================================"
+)
+
+print(
+    f"\nEPS Value: {eps_value}"
+)
+
+print(
+    f"min_samples: {min_samples}"
+)
+
+print(
+    f"Number of Clusters: {n_clusters}"
+)
+
+print(
+    f"Number of Outliers: {n_outliers}"
+)
+
+print(
+    "\nOutput Files:"
+)
+
+print(
+    "1. house_dbscan_clustered.csv"
+)
+
+print(
+    "2. models/dbscan_model.pkl"
+)
+
+print(
+    "3. models/dbscan_scaler.pkl"
+)
+
+print(
+    "4. models/dbscan_label_encoders.pkl"
+)

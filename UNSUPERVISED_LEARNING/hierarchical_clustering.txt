@@ -1,0 +1,643 @@
+# ============================================================
+# HOUSE PRICE DATASET - COMPLETE HIERARCHICAL CLUSTERING
+# ============================================================
+
+# -----------------------------
+# 1. IMPORT LIBRARIES
+# -----------------------------
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+import joblib
+
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.metrics import silhouette_score
+
+from scipy.cluster.hierarchy import dendrogram, linkage
+
+
+# ============================================================
+# 2. LOAD DATASET
+# ============================================================
+
+df = pd.read_csv("modified_data.csv")
+
+print("Dataset Loaded Successfully!")
+
+print("\nDataset Shape:")
+print(df.shape)
+
+print("\nFirst 5 Rows:")
+print(df.head())
+
+
+# ============================================================
+# 3. HANDLE MISSING VALUES
+# ============================================================
+
+data = df.copy()
+
+# Numerical columns
+numerical_columns = data.select_dtypes(
+    include=np.number
+).columns
+
+data[numerical_columns] = data[
+    numerical_columns
+].fillna(
+    data[numerical_columns].median()
+)
+
+
+# Categorical columns
+categorical_columns = data.select_dtypes(
+    include="object"
+).columns
+
+for column in categorical_columns:
+
+    if data[column].isnull().sum() > 0:
+
+        data[column] = data[column].fillna(
+            data[column].mode()[0]
+        )
+
+
+print("\nMissing Values After Cleaning:")
+print(data.isnull().sum())
+
+
+# ============================================================
+# 4. REMOVE UNNECESSARY COLUMNS
+# ============================================================
+
+data = data.drop(
+    columns=["id", "street"],
+    errors="ignore"
+)
+
+
+# ============================================================
+# 5. PROCESS DATE COLUMN
+# ============================================================
+
+if "date" in data.columns:
+
+    data["date"] = pd.to_datetime(
+        data["date"],
+        errors="coerce"
+    )
+
+    # Extract useful date information
+    data["year"] = data["date"].dt.year
+    data["month"] = data["date"].dt.month
+
+    # Fill missing values
+    data["year"] = data["year"].fillna(
+        data["year"].median()
+    )
+
+    data["month"] = data["month"].fillna(
+        data["month"].median()
+    )
+
+    # Remove original date column
+    data = data.drop(
+        columns=["date"]
+    )
+
+
+# ============================================================
+# 6. ENCODE CATEGORICAL FEATURES
+# ============================================================
+
+categorical_columns = data.select_dtypes(
+    include=["object"]
+).columns
+
+label_encoders = {}
+
+for column in categorical_columns:
+
+    le = LabelEncoder()
+
+    data[column] = le.fit_transform(
+        data[column].astype(str)
+    )
+
+    label_encoders[column] = le
+
+
+print("\nCategorical Features Encoded Successfully!")
+
+
+# ============================================================
+# 7. FEATURE SCALING
+# ============================================================
+
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(
+    data
+)
+
+scaled_df = pd.DataFrame(
+    scaled_data,
+    columns=data.columns
+)
+
+print("\nData Scaling Completed!")
+
+
+# ============================================================
+# 8. CREATE DENDROGRAM
+# ============================================================
+
+print("\nCreating Dendrogram...")
+
+
+# Ward linkage is commonly used with
+# Euclidean distance
+
+linkage_matrix = linkage(
+    scaled_df,
+    method="ward"
+)
+
+
+plt.figure(
+    figsize=(14, 7)
+)
+
+dendrogram(
+    linkage_matrix,
+    truncate_mode="lastp",
+    p=30,
+    leaf_rotation=90,
+    leaf_font_size=10,
+    show_contracted=True
+)
+
+plt.title(
+    "Hierarchical Clustering Dendrogram"
+)
+
+plt.xlabel(
+    "Clusters / Data Points"
+)
+
+plt.ylabel(
+    "Distance"
+)
+
+plt.grid(
+    axis="y",
+    linestyle="--",
+    alpha=0.5
+)
+
+plt.show()
+
+
+# ============================================================
+# 9. TEST DIFFERENT NUMBER OF CLUSTERS
+# ============================================================
+
+silhouette_scores = []
+
+cluster_range = range(
+    2,
+    11
+)
+
+
+for k in cluster_range:
+
+    hierarchical_model = AgglomerativeClustering(
+
+        n_clusters=k,
+
+        metric="euclidean",
+
+        linkage="ward"
+
+    )
+
+    labels = hierarchical_model.fit_predict(
+        scaled_df
+    )
+
+    score = silhouette_score(
+        scaled_df,
+        labels
+    )
+
+    silhouette_scores.append(
+        score
+    )
+
+
+# ============================================================
+# 10. DISPLAY SILHOUETTE SCORES
+# ============================================================
+
+print(
+    "\nSILHOUETTE SCORES:"
+)
+
+for k, score in zip(
+    cluster_range,
+    silhouette_scores
+):
+
+    print(
+        f"K = {k} : "
+        f"Silhouette Score = {score:.4f}"
+    )
+
+
+# ============================================================
+# 11. PLOT SILHOUETTE SCORES
+# ============================================================
+
+plt.figure(
+    figsize=(10, 6)
+)
+
+plt.plot(
+    list(cluster_range),
+    silhouette_scores,
+    marker="o"
+)
+
+plt.title(
+    "Silhouette Score - Hierarchical Clustering"
+)
+
+plt.xlabel(
+    "Number of Clusters"
+)
+
+plt.ylabel(
+    "Silhouette Score"
+)
+
+plt.xticks(
+    list(cluster_range)
+)
+
+plt.grid()
+
+plt.show()
+
+
+# ============================================================
+# 12. SELECT OPTIMAL NUMBER OF CLUSTERS
+# ============================================================
+
+# Automatically select the K
+# with the highest silhouette score
+
+optimal_k = list(
+    cluster_range
+)[
+    np.argmax(
+        silhouette_scores
+    )
+]
+
+
+print(
+    "\nOptimal Number of Clusters:",
+    optimal_k
+)
+
+
+# ============================================================
+# 13. TRAIN FINAL HIERARCHICAL MODEL
+# ============================================================
+
+hierarchical_final = AgglomerativeClustering(
+
+    n_clusters=optimal_k,
+
+    metric="euclidean",
+
+    linkage="ward"
+
+)
+
+
+hierarchical_labels = (
+    hierarchical_final.fit_predict(
+        scaled_df
+    )
+)
+
+
+# ============================================================
+# 14. ADD CLUSTER LABELS
+# ============================================================
+
+df_hierarchical = df.copy()
+
+df_hierarchical[
+    "Hierarchical_Cluster"
+] = hierarchical_labels
+
+
+print(
+    "\nHierarchical Clustering Completed!"
+)
+
+
+# ============================================================
+# 15. COUNT HOUSES IN EACH CLUSTER
+# ============================================================
+
+cluster_counts = (
+
+    df_hierarchical[
+        "Hierarchical_Cluster"
+    ]
+
+    .value_counts()
+
+    .sort_index()
+
+)
+
+
+print(
+    "\nNUMBER OF HOUSES IN EACH CLUSTER:"
+)
+
+print(
+    cluster_counts
+)
+
+
+# ============================================================
+# 16. VISUALIZE CLUSTER DISTRIBUTION
+# ============================================================
+
+plt.figure(
+    figsize=(8, 5)
+)
+
+cluster_counts.plot(
+    kind="bar"
+)
+
+plt.title(
+    "Number of Houses in Each Hierarchical Cluster"
+)
+
+plt.xlabel(
+    "Cluster"
+)
+
+plt.ylabel(
+    "Number of Houses"
+)
+
+plt.xticks(
+    rotation=0
+)
+
+plt.show()
+
+
+# ============================================================
+# 17. CLUSTER ANALYSIS
+# ============================================================
+
+important_features = [
+
+    "price",
+
+    "bedrooms",
+
+    "bathrooms",
+
+    "sqft_living",
+
+    "sqft_lot",
+
+    "floors",
+
+    "waterfront",
+
+    "view",
+
+    "condition",
+
+    "yr_built",
+
+    "price_per_sqft"
+
+]
+
+
+# Keep only features available
+# in the dataset
+
+important_features = [
+
+    column
+
+    for column in important_features
+
+    if column in df_hierarchical.columns
+
+]
+
+
+cluster_summary = (
+
+    df_hierarchical
+
+    .groupby(
+        "Hierarchical_Cluster"
+    )
+
+    [important_features]
+
+    .mean()
+
+)
+
+
+print(
+    "\nHIERARCHICAL CLUSTER SUMMARY:"
+)
+
+print(
+    cluster_summary
+)
+
+
+# ============================================================
+# 18. PRICE VS LIVING AREA VISUALIZATION
+# ============================================================
+
+plt.figure(
+    figsize=(10, 7)
+)
+
+scatter = plt.scatter(
+
+    df_hierarchical[
+        "sqft_living"
+    ],
+
+    df_hierarchical[
+        "price"
+    ],
+
+    c=df_hierarchical[
+        "Hierarchical_Cluster"
+    ],
+
+    alpha=0.6
+
+)
+
+
+plt.title(
+    "Hierarchical Clustering: "
+    "Living Area vs Price"
+)
+
+plt.xlabel(
+    "Square Feet Living Area"
+)
+
+plt.ylabel(
+    "House Price"
+)
+
+plt.colorbar(
+    scatter,
+    label="Cluster"
+)
+
+plt.show()
+
+
+# ============================================================
+# 19. COMPARE CLUSTER PRICES
+# ============================================================
+
+if "price" in df_hierarchical.columns:
+
+    plt.figure(
+        figsize=(9, 6)
+    )
+
+    sns.boxplot(
+
+        data=df_hierarchical,
+
+        x="Hierarchical_Cluster",
+
+        y="price"
+
+    )
+
+    plt.title(
+        "House Price Distribution "
+        "Across Hierarchical Clusters"
+    )
+
+    plt.xlabel(
+        "Cluster"
+    )
+
+    plt.ylabel(
+        "House Price"
+    )
+
+    plt.show()
+
+
+# ============================================================
+# 20. SAVE CLUSTERED DATASET
+# ============================================================
+
+df_hierarchical.to_csv(
+
+    "house_hierarchical_clustered.csv",
+
+    index=False
+
+)
+
+
+# ============================================================
+# 21. SAVE SCALER AND ENCODERS
+# ============================================================
+
+os.makedirs(
+    "models",
+    exist_ok=True
+)
+
+
+joblib.dump(
+
+    scaler,
+
+    "models/hierarchical_scaler.pkl"
+
+)
+
+
+joblib.dump(
+
+    label_encoders,
+
+    "models/hierarchical_label_encoders.pkl"
+
+)
+
+
+# ============================================================
+# 22. FINAL OUTPUT
+# ============================================================
+
+print(
+    "\n================================================"
+)
+
+print(
+    "HIERARCHICAL CLUSTERING COMPLETED SUCCESSFULLY!"
+)
+
+print(
+    "================================================"
+)
+
+print(
+    f"\nOptimal Number of Clusters: {optimal_k}"
+)
+
+print(
+    "\nOutput Files:"
+)
+
+print(
+    "1. house_hierarchical_clustered.csv"
+)
+
+print(
+    "2. models/hierarchical_scaler.pkl"
+)
+
+print(
+    "3. models/hierarchical_label_encoders.pkl"
+)

@@ -1,0 +1,629 @@
+# ============================================================
+# HOUSE PRICE DATASET - COMPLETE K-MEANS CLUSTERING
+# ============================================================
+
+# -----------------------------
+# 1. IMPORT LIBRARIES
+# -----------------------------
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+import joblib
+
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+
+
+# -----------------------------
+# 2. LOAD DATASET
+# -----------------------------
+
+df = pd.read_csv("modified_data.csv")
+
+print("Dataset Loaded Successfully!")
+print("\nDataset Shape:", df.shape)
+
+print("\nFirst 5 Rows:")
+print(df.head())
+
+
+# -----------------------------
+# 3. DATASET INFORMATION
+# -----------------------------
+
+print("\nDataset Information:")
+df.info()
+
+print("\nMissing Values:")
+print(df.isnull().sum())
+
+
+# -----------------------------
+# 4. CREATE A COPY
+# -----------------------------
+
+data = df.copy()
+
+
+# -----------------------------
+# 5. HANDLE MISSING VALUES
+# -----------------------------
+
+# Numerical columns
+numerical_columns = data.select_dtypes(include=np.number).columns
+
+data[numerical_columns] = data[numerical_columns].fillna(
+    data[numerical_columns].median()
+)
+
+# Categorical columns
+categorical_columns = data.select_dtypes(include="object").columns
+
+for column in categorical_columns:
+    if data[column].isnull().sum() > 0:
+        data[column] = data[column].fillna(
+            data[column].mode()[0]
+        )
+
+print("\nMissing Values After Cleaning:")
+print(data.isnull().sum())
+
+
+# -----------------------------
+# 6. REMOVE UNNECESSARY COLUMNS
+# -----------------------------
+
+# ID and street address are not useful for clustering
+data = data.drop(
+    columns=["id", "street"],
+    errors="ignore"
+)
+
+print("\nColumns After Removing ID and Street:")
+print(data.columns.tolist())
+
+
+# -----------------------------
+# 7. CONVERT DATE COLUMN
+# -----------------------------
+
+if "date" in data.columns:
+
+    data["date"] = pd.to_datetime(
+        data["date"],
+        errors="coerce"
+    )
+
+    # Extract year and month
+    data["year"] = data["date"].dt.year
+    data["month"] = data["date"].dt.month
+
+    # Fill missing date values
+    data["year"] = data["year"].fillna(
+        data["year"].median()
+    )
+
+    data["month"] = data["month"].fillna(
+        data["month"].median()
+    )
+
+    # Remove original date
+    data = data.drop(columns=["date"])
+
+print("\nColumns After Date Processing:")
+print(data.columns.tolist())
+
+
+# -----------------------------
+# 8. ENCODE CATEGORICAL COLUMNS
+# -----------------------------
+
+categorical_columns = data.select_dtypes(
+    include=["object"]
+).columns
+
+label_encoders = {}
+
+for column in categorical_columns:
+
+    le = LabelEncoder()
+
+    data[column] = le.fit_transform(
+        data[column].astype(str)
+    )
+
+    label_encoders[column] = le
+
+
+print("\nCategorical Columns Encoded Successfully!")
+
+
+# -----------------------------
+# 9. CHECK FINAL DATA
+# -----------------------------
+
+print("\nFinal Dataset Shape:")
+print(data.shape)
+
+print("\nFinal Dataset:")
+print(data.head())
+
+print("\nFinal Data Types:")
+print(data.dtypes)
+
+
+# -----------------------------
+# 10. FEATURE SCALING
+# -----------------------------
+
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(data)
+
+scaled_df = pd.DataFrame(
+    scaled_data,
+    columns=data.columns
+)
+
+print("\nData Scaled Successfully!")
+
+print("\nScaled Data:")
+print(scaled_df.head())
+
+
+# ============================================================
+# 11. ELBOW METHOD
+# ============================================================
+
+wcss = []
+
+for k in range(2, 11):
+
+    kmeans = KMeans(
+        n_clusters=k,
+        random_state=42,
+        n_init=10
+    )
+
+    kmeans.fit(scaled_df)
+
+    wcss.append(
+        kmeans.inertia_
+    )
+
+
+# Display WCSS values
+
+print("\nWCSS VALUES:")
+
+for k, value in zip(
+    range(2, 11),
+    wcss
+):
+    print(
+        f"K = {k} : WCSS = {value:.2f}"
+    )
+
+
+# Plot Elbow Graph
+
+plt.figure(figsize=(10, 6))
+
+plt.plot(
+    range(2, 11),
+    wcss,
+    marker="o"
+)
+
+plt.title(
+    "Elbow Method for Optimal Number of Clusters"
+)
+
+plt.xlabel(
+    "Number of Clusters (K)"
+)
+
+plt.ylabel(
+    "WCSS"
+)
+
+plt.xticks(
+    range(2, 11)
+)
+
+plt.grid()
+
+plt.show()
+
+
+# ============================================================
+# 12. SILHOUETTE SCORE
+# ============================================================
+
+silhouette_scores = []
+
+for k in range(2, 11):
+
+    kmeans = KMeans(
+        n_clusters=k,
+        random_state=42,
+        n_init=10
+    )
+
+    cluster_labels = kmeans.fit_predict(
+        scaled_df
+    )
+
+    score = silhouette_score(
+        scaled_df,
+        cluster_labels
+    )
+
+    silhouette_scores.append(
+        score
+    )
+
+
+# Display Silhouette Scores
+
+print("\nSILHOUETTE SCORES:")
+
+for k, score in zip(
+    range(2, 11),
+    silhouette_scores
+):
+
+    print(
+        f"K = {k} : Silhouette Score = {score:.4f}"
+    )
+
+
+# Plot Silhouette Scores
+
+plt.figure(figsize=(10, 6))
+
+plt.plot(
+    range(2, 11),
+    silhouette_scores,
+    marker="o"
+)
+
+plt.title(
+    "Silhouette Score for Different K Values"
+)
+
+plt.xlabel(
+    "Number of Clusters (K)"
+)
+
+plt.ylabel(
+    "Silhouette Score"
+)
+
+plt.xticks(
+    range(2, 11)
+)
+
+plt.grid()
+
+plt.show()
+
+
+# ============================================================
+# 13. SELECT OPTIMAL K
+# ============================================================
+
+# Change this value after checking
+# Elbow Method and Silhouette Score
+
+optimal_k = 3
+
+
+print(
+    f"\nSelected Optimal K = {optimal_k}"
+)
+
+
+# ============================================================
+# 14. TRAIN FINAL K-MEANS MODEL
+# ============================================================
+
+kmeans_final = KMeans(
+    n_clusters=optimal_k,
+    random_state=42,
+    n_init=10
+)
+
+kmeans_labels = kmeans_final.fit_predict(
+    scaled_df
+)
+
+
+# Add cluster labels
+
+df_kmeans = df.copy()
+
+df_kmeans["KMeans_Cluster"] = (
+    kmeans_labels
+)
+
+
+print(
+    "\nK-Means Clustering Completed Successfully!"
+)
+
+
+# ============================================================
+# 15. NUMBER OF HOUSES IN EACH CLUSTER
+# ============================================================
+
+cluster_counts = (
+    df_kmeans["KMeans_Cluster"]
+    .value_counts()
+    .sort_index()
+)
+
+print(
+    "\nNUMBER OF HOUSES IN EACH CLUSTER:"
+)
+
+print(
+    cluster_counts
+)
+
+
+# Plot Cluster Distribution
+
+plt.figure(figsize=(8, 5))
+
+cluster_counts.plot(
+    kind="bar"
+)
+
+plt.title(
+    "Number of Houses in Each Cluster"
+)
+
+plt.xlabel(
+    "Cluster"
+)
+
+plt.ylabel(
+    "Number of Houses"
+)
+
+plt.xticks(
+    rotation=0
+)
+
+plt.show()
+
+
+# ============================================================
+# 16. ANALYZE CLUSTERS
+# ============================================================
+
+important_features = [
+
+    "price",
+
+    "bedrooms",
+
+    "bathrooms",
+
+    "sqft_living",
+
+    "sqft_lot",
+
+    "floors",
+
+    "waterfront",
+
+    "view",
+
+    "condition",
+
+    "yr_built",
+
+    "price_per_sqft"
+
+]
+
+
+# Keep only columns that exist
+
+important_features = [
+
+    column
+    for column in important_features
+    if column in df_kmeans.columns
+
+]
+
+
+cluster_summary = (
+
+    df_kmeans
+
+    .groupby(
+        "KMeans_Cluster"
+    )
+
+    [important_features]
+
+    .mean()
+
+)
+
+
+print(
+    "\nCLUSTER SUMMARY:"
+)
+
+print(
+    cluster_summary
+)
+
+
+# ============================================================
+# 17. VISUALIZE CLUSTERS
+# ============================================================
+
+# Scatter Plot:
+# Living Area vs Price
+
+plt.figure(
+    figsize=(10, 7)
+)
+
+scatter = plt.scatter(
+
+    df_kmeans["sqft_living"],
+
+    df_kmeans["price"],
+
+    c=df_kmeans[
+        "KMeans_Cluster"
+    ],
+
+    alpha=0.6
+
+)
+
+plt.title(
+    "K-Means Clusters: Living Area vs Price"
+)
+
+plt.xlabel(
+    "Square Feet Living Area"
+)
+
+plt.ylabel(
+    "House Price"
+)
+
+plt.colorbar(
+    scatter,
+    label="Cluster"
+)
+
+plt.show()
+
+
+# ============================================================
+# 18. CLUSTER CENTERS
+# ============================================================
+
+cluster_centers = pd.DataFrame(
+
+    kmeans_final.cluster_centers_,
+
+    columns=data.columns
+
+)
+
+
+print(
+    "\nCLUSTER CENTERS (SCALED VALUES):"
+)
+
+print(
+    cluster_centers
+)
+
+
+# ============================================================
+# 19. SAVE MODELS
+# ============================================================
+
+os.makedirs(
+    "models",
+    exist_ok=True
+)
+
+
+# Save K-Means Model
+
+joblib.dump(
+
+    kmeans_final,
+
+    "models/kmeans_model.pkl"
+
+)
+
+
+# Save Scaler
+
+joblib.dump(
+
+    scaler,
+
+    "models/scaler.pkl"
+
+)
+
+
+# Save Label Encoders
+
+joblib.dump(
+
+    label_encoders,
+
+    "models/label_encoders.pkl"
+
+)
+
+
+# ============================================================
+# 20. SAVE CLUSTERED DATASET
+# ============================================================
+
+df_kmeans.to_csv(
+
+    "house_kmeans_clustered.csv",
+
+    index=False
+
+)
+
+
+print(
+    "\n======================================"
+)
+
+print(
+    "K-MEANS PROJECT COMPLETED SUCCESSFULLY!"
+)
+
+print(
+    "======================================"
+)
+
+print(
+    f"\nOptimal Number of Clusters: {optimal_k}"
+)
+
+print(
+    "\nFiles Saved:"
+)
+
+print(
+    "1. models/kmeans_model.pkl"
+)
+
+print(
+    "2. models/scaler.pkl"
+)
+
+print(
+    "3. models/label_encoders.pkl"
+)
+
+print(
+    "4. house_kmeans_clustered.csv"
+)

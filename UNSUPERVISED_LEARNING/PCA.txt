@@ -1,0 +1,642 @@
+# ============================================================
+# HOUSE PRICE DATASET - COMPLETE PCA IMPLEMENTATION
+# ============================================================
+
+# -----------------------------
+# 1. IMPORT LIBRARIES
+# -----------------------------
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+import joblib
+
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.decomposition import PCA
+
+
+# ============================================================
+# 2. LOAD DATASET
+# ============================================================
+
+df = pd.read_csv("modified_data.csv")
+
+print("Dataset Loaded Successfully!")
+
+print("\nDataset Shape:", df.shape)
+
+print("\nFirst 5 Rows:")
+print(df.head())
+
+
+# ============================================================
+# 3. CREATE COPY OF DATASET
+# ============================================================
+
+data = df.copy()
+
+
+# ============================================================
+# 4. HANDLE MISSING VALUES
+# ============================================================
+
+# Handle numerical missing values
+
+numerical_columns = data.select_dtypes(
+    include=np.number
+).columns
+
+data[numerical_columns] = data[
+    numerical_columns
+].fillna(
+    data[numerical_columns].median()
+)
+
+
+# Handle categorical missing values
+
+categorical_columns = data.select_dtypes(
+    include="object"
+).columns
+
+for column in categorical_columns:
+
+    if data[column].isnull().sum() > 0:
+
+        data[column] = data[column].fillna(
+            data[column].mode()[0]
+        )
+
+
+print("\nMissing Values After Cleaning:")
+print(data.isnull().sum())
+
+
+# ============================================================
+# 5. REMOVE UNNECESSARY COLUMNS
+# ============================================================
+
+data = data.drop(
+    columns=["id", "street"],
+    errors="ignore"
+)
+
+print("\nRemaining Columns:")
+print(data.columns.tolist())
+
+
+# ============================================================
+# 6. PROCESS DATE COLUMN
+# ============================================================
+
+if "date" in data.columns:
+
+    data["date"] = pd.to_datetime(
+        data["date"],
+        errors="coerce"
+    )
+
+    # Extract year
+    data["year"] = data["date"].dt.year
+
+    # Extract month
+    data["month"] = data["date"].dt.month
+
+    # Fill missing values
+
+    data["year"] = data["year"].fillna(
+        data["year"].median()
+    )
+
+    data["month"] = data["month"].fillna(
+        data["month"].median()
+    )
+
+    # Remove original date column
+
+    data = data.drop(
+        columns=["date"]
+    )
+
+
+# ============================================================
+# 7. ENCODE CATEGORICAL COLUMNS
+# ============================================================
+
+categorical_columns = data.select_dtypes(
+    include=["object"]
+).columns
+
+label_encoders = {}
+
+for column in categorical_columns:
+
+    le = LabelEncoder()
+
+    data[column] = le.fit_transform(
+        data[column].astype(str)
+    )
+
+    label_encoders[column] = le
+
+
+print("\nCategorical Columns Encoded Successfully!")
+
+
+# ============================================================
+# 8. FEATURE SCALING
+# ============================================================
+
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(
+    data
+)
+
+scaled_df = pd.DataFrame(
+    scaled_data,
+    columns=data.columns
+)
+
+print("\nFeature Scaling Completed!")
+
+
+# ============================================================
+# 9. APPLY PCA - KEEP ALL COMPONENTS
+# ============================================================
+
+pca_full = PCA()
+
+pca_full.fit(
+    scaled_df
+)
+
+
+# ============================================================
+# 10. EXPLAINED VARIANCE
+# ============================================================
+
+explained_variance = (
+    pca_full.explained_variance_ratio_
+)
+
+cumulative_variance = np.cumsum(
+    explained_variance
+)
+
+
+print("\nEXPLAINED VARIANCE BY EACH COMPONENT:")
+
+for i, variance in enumerate(
+    explained_variance
+):
+
+    print(
+        f"PC{i + 1}: "
+        f"{variance * 100:.2f}%"
+    )
+
+
+print("\nCUMULATIVE EXPLAINED VARIANCE:")
+
+for i, variance in enumerate(
+    cumulative_variance
+):
+
+    print(
+        f"PC1 to PC{i + 1}: "
+        f"{variance * 100:.2f}%"
+    )
+
+
+# ============================================================
+# 11. SCREE PLOT
+# ============================================================
+
+plt.figure(
+    figsize=(10, 6)
+)
+
+plt.plot(
+
+    range(
+        1,
+        len(explained_variance) + 1
+    ),
+
+    explained_variance * 100,
+
+    marker="o"
+
+)
+
+plt.title(
+    "PCA Scree Plot"
+)
+
+plt.xlabel(
+    "Principal Component"
+)
+
+plt.ylabel(
+    "Explained Variance (%)"
+)
+
+plt.xticks(
+
+    range(
+        1,
+        len(explained_variance) + 1
+    )
+
+)
+
+plt.grid()
+
+plt.show()
+
+
+# ============================================================
+# 12. CUMULATIVE VARIANCE GRAPH
+# ============================================================
+
+plt.figure(
+    figsize=(10, 6)
+)
+
+plt.plot(
+
+    range(
+        1,
+        len(cumulative_variance) + 1
+    ),
+
+    cumulative_variance * 100,
+
+    marker="o"
+
+)
+
+plt.axhline(
+    y=95,
+    linestyle="--",
+    label="95% Variance"
+)
+
+plt.title(
+    "Cumulative Explained Variance"
+)
+
+plt.xlabel(
+    "Number of Principal Components"
+)
+
+plt.ylabel(
+    "Cumulative Variance (%)"
+)
+
+plt.xticks(
+
+    range(
+        1,
+        len(cumulative_variance) + 1
+    )
+
+)
+
+plt.legend()
+
+plt.grid()
+
+plt.show()
+
+
+# ============================================================
+# 13. FIND NUMBER OF COMPONENTS FOR 95% VARIANCE
+# ============================================================
+
+n_components_95 = np.argmax(
+    cumulative_variance >= 0.95
+) + 1
+
+
+print(
+    f"\nNumber of Components Required "
+    f"for 95% Variance: {n_components_95}"
+)
+
+
+# ============================================================
+# 14. APPLY PCA WITH 2 COMPONENTS
+# ============================================================
+
+pca_2d = PCA(
+    n_components=2
+)
+
+pca_data = pca_2d.fit_transform(
+    scaled_df
+)
+
+
+# Convert PCA result to DataFrame
+
+pca_df = pd.DataFrame(
+
+    pca_data,
+
+    columns=[
+
+        "Principal_Component_1",
+
+        "Principal_Component_2"
+
+    ]
+
+)
+
+
+print("\nPCA Data (First 5 Rows):")
+
+print(
+    pca_df.head()
+)
+
+
+# ============================================================
+# 15. VARIANCE EXPLAINED BY 2 COMPONENTS
+# ============================================================
+
+pc1_variance = (
+    pca_2d.explained_variance_ratio_[0]
+    * 100
+)
+
+pc2_variance = (
+    pca_2d.explained_variance_ratio_[1]
+    * 100
+)
+
+total_2d_variance = (
+    pca_2d.explained_variance_ratio_.sum()
+    * 100
+)
+
+
+print(
+    f"\nPC1 Explained Variance: "
+    f"{pc1_variance:.2f}%"
+)
+
+print(
+    f"PC2 Explained Variance: "
+    f"{pc2_variance:.2f}%"
+)
+
+print(
+    f"Total Variance Explained by "
+    f"2 Components: "
+    f"{total_2d_variance:.2f}%"
+)
+
+
+# ============================================================
+# 16. PCA 2D VISUALIZATION
+# ============================================================
+
+plt.figure(
+    figsize=(10, 7)
+)
+
+plt.scatter(
+
+    pca_df[
+        "Principal_Component_1"
+    ],
+
+    pca_df[
+        "Principal_Component_2"
+    ],
+
+    alpha=0.6
+
+)
+
+
+plt.title(
+    "PCA - 2D Visualization of House Dataset"
+)
+
+plt.xlabel(
+    f"Principal Component 1 "
+    f"({pc1_variance:.2f}% Variance)"
+)
+
+plt.ylabel(
+    f"Principal Component 2 "
+    f"({pc2_variance:.2f}% Variance)"
+)
+
+plt.grid()
+
+plt.show()
+
+
+# ============================================================
+# 17. PCA FEATURE IMPORTANCE
+# ============================================================
+
+pca_loadings = pd.DataFrame(
+
+    pca_2d.components_.T,
+
+    columns=[
+        "PC1",
+        "PC2"
+    ],
+
+    index=data.columns
+
+)
+
+
+print(
+    "\nPCA FEATURE LOADINGS:"
+)
+
+print(
+    pca_loadings
+)
+
+
+# ============================================================
+# 18. TOP FEATURES FOR PC1
+# ============================================================
+
+top_pc1 = (
+
+    pca_loadings[
+        "PC1"
+    ]
+
+    .abs()
+
+    .sort_values(
+        ascending=False
+    )
+
+)
+
+
+print(
+    "\nTOP FEATURES CONTRIBUTING TO PC1:"
+)
+
+print(
+    top_pc1.head(10)
+)
+
+
+# ============================================================
+# 19. TOP FEATURES FOR PC2
+# ============================================================
+
+top_pc2 = (
+
+    pca_loadings[
+        "PC2"
+    ]
+
+    .abs()
+
+    .sort_values(
+        ascending=False
+    )
+
+)
+
+
+print(
+    "\nTOP FEATURES CONTRIBUTING TO PC2:"
+)
+
+print(
+    top_pc2.head(10)
+)
+
+
+# ============================================================
+# 20. SAVE PCA MODEL AND DATA
+# ============================================================
+
+os.makedirs(
+    "models",
+    exist_ok=True
+)
+
+
+# Save PCA model
+
+joblib.dump(
+
+    pca_2d,
+
+    "models/pca_model.pkl"
+
+)
+
+
+# Save scaler
+
+joblib.dump(
+
+    scaler,
+
+    "models/pca_scaler.pkl"
+
+)
+
+
+# Save label encoders
+
+joblib.dump(
+
+    label_encoders,
+
+    "models/pca_label_encoders.pkl"
+
+)
+
+
+# Save PCA transformed data
+
+pca_df.to_csv(
+
+    "house_pca_2d.csv",
+
+    index=False
+
+)
+
+
+# ============================================================
+# 21. FINAL OUTPUT
+# ============================================================
+
+print(
+    "\n================================================"
+)
+
+print(
+    "PCA IMPLEMENTATION COMPLETED SUCCESSFULLY!"
+)
+
+print(
+    "================================================"
+)
+
+print(
+    f"\nOriginal Number of Features: "
+    f"{data.shape[1]}"
+)
+
+print(
+    f"Components for 95% Variance: "
+    f"{n_components_95}"
+)
+
+print(
+    f"PC1 Variance: "
+    f"{pc1_variance:.2f}%"
+)
+
+print(
+    f"PC2 Variance: "
+    f"{pc2_variance:.2f}%"
+)
+
+print(
+    f"Total 2D Variance: "
+    f"{total_2d_variance:.2f}%"
+)
+
+print(
+    "\nOutput Files:"
+)
+
+print(
+    "1. house_pca_2d.csv"
+)
+
+print(
+    "2. models/pca_model.pkl"
+)
+
+print(
+    "3. models/pca_scaler.pkl"
+)
+
+print(
+    "4. models/pca_label_encoders.pkl"
+)
